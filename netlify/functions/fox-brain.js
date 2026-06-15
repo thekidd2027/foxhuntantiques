@@ -1,4 +1,3 @@
-// fox-brain.js — secure proxy to the Anthropic API.
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -11,7 +10,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method Not Allowed' }) };
 
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'missing_key', detail: 'ANTHROPIC_API_KEY is not set in Netlify environment variables.' }) };
+  if (!key) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'missing_key', detail: 'ANTHROPIC_API_KEY is not set.' }) };
 
   let body;
   try { body = JSON.parse(event.body || '{}'); }
