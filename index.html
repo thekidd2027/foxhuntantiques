@@ -83,6 +83,13 @@ main{max-width:560px;margin:0 auto;padding:8px 18px;}
 .facts li:before{content:'';position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--moss-deep);}
 .comps{display:flex;flex-direction:column;gap:8px;}
 .comp{display:flex;justify-content:space-between;gap:12px;font-size:.9rem;padding:9px 12px;background:var(--paper-2);border-radius:10px;}
+.comp-link{text-decoration:none;color:inherit;transition:background .12s,transform .1s;cursor:pointer;}
+.comp-link:hover{background:#e8dcc4;}
+.comp-link:active{transform:scale(.99);}
+.comp .price{display:inline-flex;align-items:center;gap:6px;}
+.extlink{width:13px;height:13px;color:var(--foxfire);flex:none;}
+.sharp-badge{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:.76rem;font-weight:700;color:#4a7050;background:rgba(143,178,149,.22);padding:5px 12px;border-radius:999px;}
+.sharp-badge svg{width:14px;height:14px;}
 .comp .src{color:var(--ink-soft);}
 .comp .price{font-family:'Fraunces',serif;font-weight:700;color:var(--denwood);white-space:nowrap;}
 .verdict{padding:16px 18px;display:flex;gap:12px;align-items:flex-start;}
@@ -149,38 +156,60 @@ $('photoInput').onchange=async e=>{
   $('askBtn').disabled=false;
 };
 
-$('askBtn').onclick=async()=>{
+let backstampData=null;   // optional second photo of the underside
+
+$('askBtn').onclick=()=>runAppraisal();
+
+// Core appraisal — runs with the front photo, plus the backstamp if we have one.
+async function runAppraisal(){
   if(!photoData)return;
   $('askBtn').disabled=true;
   const out=$('result');
-  out.innerHTML=`<div class="thinking"><div class="spinner"></div><p>The fox is studying your plate and checking the market…</p></div>`;
+  out.innerHTML=`<div class="thinking"><div class="spinner"></div><p>${backstampData?'The fox is reading the backstamp to sharpen the estimate…':'The fox is studying your plate and checking the market…'}</p></div>`;
 
-  const m=photoData.match(/^data:(image\/\w+);base64,(.+)$/);
+  // build the image(s) for the request
+  const imgs=[];
+  const mf=photoData.match(/^data:(image\/\w+);base64,(.+)$/);
+  imgs.push({type:'image',source:{type:'base64',media_type:mf[1],data:mf[2]}});
+  if(backstampData){
+    const mb=backstampData.match(/^data:(image\/\w+);base64,(.+)$/);
+    imgs.push({type:'image',source:{type:'base64',media_type:mb[1],data:mb[2]}});
+  }
+
+  const backNote = backstampData
+    ? `\n\nThe collector has ALSO provided a second photo: the BACKSTAMP / underside of the piece. Use it to pin down the maker, age, and authenticity as precisely as possible. With the backstamp identified, commit to a TIGHTER price range and a higher confidence than you would from the front alone — avoid hedging if the mark is legible.`
+    : '';
+
   const content=[
-    {type:'image',source:{type:'base64',media_type:m[1],data:m[2]}},
-    {type:'text',text:`You are an expert antiques appraiser specializing in plates, china, and dishware. A collector has photographed a plate they're considering buying. 
+    ...imgs,
+    {type:'text',text:`You are an expert antiques appraiser specializing in plates, china, and dishware. A collector has photographed a plate they're considering buying.${backNote}
 
-Study the photo carefully (pattern, shape, glaze, any visible maker's mark or backstamp, condition, era cues). Then use web search to find what comparable pieces actually sell for right now — check eBay sold listings, Replacements.com, Etsy, and antique marketplaces.
+Study the photo(s) carefully (pattern, shape, glaze, maker's mark or backstamp, condition, era cues). Then use web search to find what comparable pieces actually sell for right now — check eBay sold listings, Replacements.com, Etsy, and antique marketplaces.
+
+Aim for the TIGHTEST realistic range the evidence supports — don't pad it to be safe. Only widen the range when the piece is genuinely ambiguous; if you can identify it well, keep low and high reasonably close.
+
+For each comparable, include a "url": when you are confident of a specific live listing, give its direct URL; otherwise give a SEARCH url that lands on matching listings (e.g. "https://www.ebay.com/sch/i.html?_nkw=rose+medallion+saucer&LH_Sold=1" for eBay sold, or the site's search for the pattern). Always provide a working url of one kind or the other.
 
 Respond ONLY with valid JSON (no markdown, no preamble) in exactly this shape:
 {
-  "identification": "best guess at what this is — pattern name, maker, and type if determinable",
+  "identification": "best guess — pattern name, maker, and type if determinable",
   "era": "approximate age/era, e.g. 'c. 1950s' or 'late Victorian'",
-  "confidence": "high | medium | low (how sure you are of the ID from the photo)",
+  "confidence": "high | medium | low",
   "low": <number, low end of realistic resale range in USD>,
   "high": <number, high end of realistic resale range in USD>,
-  "typical": <number, the most typical/likely selling price in USD>,
-  "facts": ["2-4 short interesting or value-relevant facts about this piece or pattern"],
-  "comparables": [{"source":"where, e.g. eBay sold","price":"$X–$Y or $X"}],
-  "verdict_level": "good | warn | bad (good = priced like these usually sell or below; warn = on the higher side; bad = typically sells for much less)",
-  "verdict": "1-2 sentences: at roughly what price is this a good buy, and what should the collector watch for"
+  "typical": <number, the most typical selling price in USD>,
+  "facts": ["2-4 short value-relevant facts about this piece or pattern"],
+  "comparables": [{"source":"where, e.g. eBay sold","price":"$X–$Y or $X","url":"direct or search URL"}],
+  "verdict_level": "good | warn | bad",
+  "verdict": "1-2 sentences: at roughly what price is this a good buy, and what to watch for",
+  "backstamp_tip": "one short sentence on what photographing the backstamp would reveal (only meaningful when no backstamp was provided)"
 }
 
-Be specific and realistic with prices — base them on actual comparable sales, not guesses. If you genuinely cannot tell what it is, set confidence to "low" and give a wide range with a note in the verdict to check the backstamp.`}
+Be specific and realistic — base prices on actual comparable sales. If you truly cannot tell what it is, set confidence "low", give a wider range, and say in the verdict to check the backstamp.`}
   ];
 
   try{
-    const data=await askFox({model:'claude-sonnet-4-6',max_tokens:1500,messages:[{role:'user',content}],tools:[{type:'web_search_20250305',name:'web_search'}]});
+    const data=await askFox({model:'claude-sonnet-4-6',max_tokens:1600,messages:[{role:'user',content}],tools:[{type:'web_search_20250305',name:'web_search'}]});
     const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
     let j=null;
     try{ j=JSON.parse(txt.replace(/```json|```/g,'').trim()); }
@@ -194,6 +223,16 @@ Be specific and realistic with prices — base them on actual comparable sales, 
     out.innerHTML=`<div class="errbox"><b>The fox could not get a clear read.</b><br>${esc(msg)}</div>`;
   }
   $('askBtn').disabled=false;
+}
+
+// hidden input for the backstamp photo
+const backInput=document.createElement('input');
+backInput.type='file'; backInput.accept='image/*'; backInput.capture='environment'; backInput.style.display='none';
+document.body.appendChild(backInput);
+backInput.onchange=async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  backstampData=await compress(f,1100,.82);
+  runAppraisal();  // re-run automatically with the backstamp added
 };
 
 function renderResult(j){
@@ -205,27 +244,46 @@ function renderResult(j){
     ? `<path d="M18 6L6 18M6 6l12 12"/>`
     : `<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>`;
   const facts=(j.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
-  const comps=(j.comparables||[]).map(c=>`<div class="comp"><span class="src">${esc(c.source||'')}</span><span class="price">${esc(c.price||'')}</span></div>`).join('');
+  const comps=(j.comparables||[]).map(c=>{
+    const inner=`<span class="src">${esc(c.source||'')}</span><span class="price">${esc(c.price||'')}${c.url?` <svg class="extlink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>`:''}</span>`;
+    return c.url
+      ? `<a class="comp comp-link" href="${esc(c.url)}" target="_blank" rel="noopener">${inner}</a>`
+      : `<div class="comp">${inner}</div>`;
+  }).join('');
+  // backstamp button only shown when we don't already have one
+  const backBtn = backstampData ? '' :
+    `<div class="sect" style="text-align:center">
+       <button class="btn btn-ghost" id="addBackBtn" style="width:100%">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+         Sharpen it — add a photo of the backstamp
+       </button>
+       ${j.backstamp_tip?`<div class="phint" style="margin-top:8px">${esc(j.backstamp_tip)}</div>`:'<div class="phint" style="margin-top:8px">The mark on the underside narrows the maker, age, and value.</div>'}
+     </div>`;
+  const sharpened = backstampData ? `<div class="sharp-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Sharpened with the backstamp</div>` : '';
   $('result').innerHTML=`
     <div class="card">
       <div class="range-band">
         <div class="range-label">Estimated resale value</div>
-        <div class="range-value">$${Math.round(j.low)}–$${Math.round(j.high)}</div>
-        ${j.typical!=null?`<div class="range-typical">Typically sells around <b>$${Math.round(j.typical)}</b></div>`:''}
+        ${j.typical!=null
+          ? `<div class="range-value">$${Math.round(j.typical)}</div><div class="range-typical">typical price &middot; usually <b>$${Math.round(j.low)}–$${Math.round(j.high)}</b></div>`
+          : `<div class="range-value">$${Math.round(j.low)}–$${Math.round(j.high)}</div>`}
         <div class="confidence ${conf}">${conf} confidence</div>
+        ${sharpened}
       </div>
       <div class="sect">
         <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>What it looks like</h3>
         <div class="idline">${esc(j.identification||'Unidentified plate')}${j.era?` <span class="era">· ${esc(j.era)}</span>`:''}</div>
       </div>
+      ${comps?`<div class="sect"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>What they're selling for</h3><div class="comps">${comps}</div><div class="phint" style="margin-top:8px">Tap a source to see the listings.</div></div>`:''}
       ${facts?`<div class="sect"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 8h.01M11 12h1v4h1"/></svg>Worth knowing</h3><ul class="facts">${facts}</ul></div>`:''}
-      ${comps?`<div class="sect"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>What they're selling for</h3><div class="comps">${comps}</div></div>`:''}
+      ${backBtn}
       <div class="verdict ${vlevel}">
         <div class="vicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">${vicon}</svg></div>
         <div class="vtext">${esc(j.verdict||'')}</div>
       </div>
       <div class="disclaim">This is an AI estimate to research from, not a certified appraisal. True value depends on the actual maker's mark, condition, and current demand — verify the backstamp and recent sold listings before a big buy.</div>
     </div>`;
+  const ab=$('addBackBtn'); if(ab) ab.onclick=()=>backInput.click();
 }
 
 /* ---- AI call: secure Netlify function, with direct fallback inside Claude ---- */
