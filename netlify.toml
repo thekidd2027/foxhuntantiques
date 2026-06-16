@@ -7,3 +7,4 @@
 # Make the function reachable at /.netlify/functions/fox-brain
 [functions]
   node_bundler = "esbuild"
+  
