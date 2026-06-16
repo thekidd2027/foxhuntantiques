@@ -72,6 +72,17 @@ main{max-width:1100px;margin:0 auto;padding:20px 18px 40px;}
 .seg{display:flex;background:var(--paper-2,#f3e9d4);border-radius:11px;padding:4px;gap:4px;margin:4px 0 16px;}
 .seg-btn{flex:1;border:none;background:transparent;padding:9px 12px;border-radius:8px;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--ink-soft,#8a7a64);cursor:pointer;transition:background .15s,color .15s;}
 .seg-btn.active{background:#fff;color:var(--foxfire,#c64627);box-shadow:0 1px 3px rgba(60,40,20,.12);}
+/* save success animation */
+@keyframes savePop{0%{transform:scale(.96);}50%{transform:scale(1.04);}100%{transform:scale(1);}}
+@keyframes saveCheck{0%{stroke-dashoffset:24;}100%{stroke-dashoffset:0;}}
+.btn.saved-ok{background:#6f9c6a!important;border-color:#6f9c6a!important;color:#fff!important;animation:savePop .35s ease;}
+.btn.saved-ok svg{width:18px;height:18px;margin-right:4px;}
+.btn.saved-ok svg path{stroke-dasharray:24;stroke-dashoffset:24;animation:saveCheck .4s ease .1s forwards;}
+.save-flash{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);background:#6f9c6a;color:#fff;width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;box-shadow:0 8px 30px rgba(60,40,20,.3);}
+.save-flash.show{animation:flashPop 1.1s ease forwards;}
+.save-flash svg{width:42px;height:42px;}
+.save-flash svg path{stroke-dasharray:30;stroke-dashoffset:30;animation:saveCheck .45s ease .15s forwards;}
+@keyframes flashPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.6);}20%{opacity:1;transform:translate(-50%,-50%) scale(1.05);}35%{transform:translate(-50%,-50%) scale(1);}80%{opacity:1;}100%{opacity:0;transform:translate(-50%,-50%) scale(1);}}
 
 /* collections */
 .collections{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:15px;}
@@ -432,7 +443,7 @@ footer.appfoot{text-align:center;padding:26px 20px 10px;color:var(--ink-soft);fo
     <div class="auth-welcome" id="authWelcome">Sign in to your den, or start your collection.</div>
 
     <div class="auth-fields">
-      <div class="field" id="nameField" style="display:none"><label>Hunter name</label><input type="text" id="authName" placeholder="The Plate Whisperer" autocomplete="nickname"></div>
+      <div class="field" id="nameField" style="display:none"><label>Your name</label><input type="text" id="authName" placeholder="e.g. Christian Kidd" autocomplete="name"></div>
       <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email"></div>
       <div class="field"><label>Password</label><input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password"></div>
     </div>
@@ -713,7 +724,7 @@ footer.appfoot{text-align:center;padding:26px 20px 10px;color:var(--ink-soft);fo
         </div>
         <input type="file" id="profilePhotoInput" accept="image/*" class="hidden">
       </div>
-      <div class="field"><label>Hunter name</label><input type="text" id="set_name" placeholder="The Plate Whisperer" maxlength="40"></div>
+      <div class="field"><label>Your name</label><input type="text" id="set_name" placeholder="e.g. Christian Kidd" maxlength="40"></div>
       <div class="field"><label>Where you hunt</label><input type="text" id="set_loc" placeholder="Cypress, TX" maxlength="50"></div>
       <button class="btn btn-primary btn-sm" id="saveProfileBtn" style="width:100%;justify-content:center">Save profile</button>
     </div>
@@ -998,7 +1009,7 @@ function setAuthMode(mode){
     $('authSubmit').textContent='Create account';
     $('authSwitchText').textContent='Already have a den?';
     $('authSwitchBtn').textContent='Sign in';
-    $('authWelcome').textContent='Start your collection — pick a hunter name to begin.';
+    $('authWelcome').textContent='Start your collection — enter your name to begin.';
     $('authPassword').setAttribute('autocomplete','new-password');
   } else {
     $('nameField').style.display='none';
@@ -1020,7 +1031,8 @@ $('authSubmit').onclick=async()=>{
   $('authSubmit').disabled=true; $('authSubmit').textContent='One moment…';
   try{
     if(authMode==='signup'){
-      const name=$('authName').value.trim()||'New Hunter';
+      const name=$('authName').value.trim();
+      if(!name){ showAuthError('Please enter your name.'); $('authSubmit').disabled=false; $('authSubmit').textContent='Create account'; return; }
       const {data,error}=await sb.auth.signUp({email,password:pass,options:{data:{hunter_name:name}}});
       if(error) throw error;
       if(!data.session){ // email confirmation on
@@ -2081,18 +2093,18 @@ $('profilePhotoInput').onchange=async e=>{
     showToast('Photo didn\u2019t save — '+(error.message||'try again'));
     return;
   }
-  showToast('Photo updated');
+  renderProfile(); saveSuccess(null);
 };
 
 $('saveProfileBtn').onclick=async()=>{
-  const n=$('set_name').value.trim(); if(!n){showToast('Pick a hunter name');return;}
+  const n=$('set_name').value.trim(); if(!n){showToast('Please enter your name');return;}
   const loc=$('set_loc').value.trim();
   $('saveProfileBtn').disabled=true;
   const {error}=await sb.from('profiles').upsert({id:currentUser.id,hunter_name:n,location:loc,avatar:misc.profilePhoto||null},{onConflict:'id'});
   $('saveProfileBtn').disabled=false;
   if(error){ console.error('profile save failed:',error); showToast('Could not save — '+(error.message||'check connection')); return; }
   misc.profileName=n; misc.profileLoc=loc; await persistAux();
-  renderProfile(); showToast('Profile saved');
+  renderProfile(); saveSuccess($('saveProfileBtn'),'Saved!');
 };
 
 $('set_defaultRarity').onchange=async()=>{ misc.defaultRarity=$('set_defaultRarity').value; await persistAux(); };
@@ -2132,6 +2144,25 @@ document.querySelectorAll('.overlay').forEach(ov=>ov.addEventListener('click',e=
 
 /* ---------- toast ---------- */
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),2300);}
+
+// success animation: flashes a checkmark, and optionally morphs a button to a "Saved!" state
+function saveSuccess(btn, label){
+  // center checkmark flash
+  let f=document.getElementById('saveFlash');
+  if(!f){ f=document.createElement('div'); f.id='saveFlash'; f.className='save-flash';
+    f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>';
+    document.body.appendChild(f); }
+  f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
+  // button morph
+  if(btn){
+    const orig=btn.dataset.origLabel||btn.textContent;
+    btn.dataset.origLabel=orig;
+    btn.classList.add('saved-ok');
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>'+(label||'Saved!');
+    clearTimeout(btn._svtm);
+    btn._svtm=setTimeout(()=>{ btn.classList.remove('saved-ok'); btn.textContent=orig; },1500);
+  }
+}
 
 /* ---------- image compress ---------- */
 function compressImage(file,maxDim,quality){return new Promise(res=>{const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let{width:w,height:h}=img;if(w>h&&w>maxDim){h=h*maxDim/w;w=maxDim;}else if(h>maxDim){w=w*maxDim/h;h=maxDim;}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);res(cv.toDataURL('image/jpeg',quality));};img.onerror=()=>res(e.target.result);img.src=e.target.result;};r.readAsDataURL(file);});}
