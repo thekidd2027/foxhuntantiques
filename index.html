@@ -69,6 +69,9 @@ main{max-width:1100px;margin:0 auto;padding:20px 18px 40px;}
 .btn-sm{padding:8px 13px;font-size:.82rem;}
 .btn.icon-only{padding:8px 10px;}
 .btn.icon-only svg{margin:0;}
+.seg{display:flex;background:var(--paper-2,#f3e9d4);border-radius:11px;padding:4px;gap:4px;margin:4px 0 16px;}
+.seg-btn{flex:1;border:none;background:transparent;padding:9px 12px;border-radius:8px;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--ink-soft,#8a7a64);cursor:pointer;transition:background .15s,color .15s;}
+.seg-btn.active{background:#fff;color:var(--foxfire,#c64627);box-shadow:0 1px 3px rgba(60,40,20,.12);}
 
 /* collections */
 .collections{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:15px;}
@@ -479,17 +482,22 @@ footer.appfoot{text-align:center;padding:26px 20px 10px;color:var(--ink-soft);fo
 
     <div id="denMain">
       <div class="section-head">
-        <div><h2>Your Collections</h2><div class="sub">Every great hunt needs a place to keep the spoils.</div></div>
+        <div><h2 id="denHeading">Your Collections</h2><div class="sub" id="denSub">Every great hunt needs a place to keep the spoils.</div></div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn btn-ghost btn-sm icon-only" id="trophyToggle" title="Trophy Case" aria-label="Trophy Case">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9a6 6 0 0 0 12 0V3H6z"/><path d="M6 5H3v2a3 3 0 0 0 3 3M18 5h3v2a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg>
           </button>
           <button class="btn btn-ghost btn-sm" id="newCollectionTop">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span id="newBtnLabel">New</span>
           </button>
         </div>
       </div>
+      <div class="seg" id="denSeg">
+        <button class="seg-btn active" data-den="collections">Collections</button>
+        <button class="seg-btn" data-den="singles">Single Items</button>
+      </div>
       <div class="collections" id="collectionsGrid"></div>
+      <div class="plates" id="singlesGrid" style="display:none;"></div>
     </div>
   </section>
 
@@ -741,7 +749,7 @@ footer.appfoot{text-align:center;padding:26px 20px 10px;color:var(--ink-soft);fo
   </section>
 </main>
 
-<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add find</button>
+
 
 <!-- bottom nav -->
 <nav class="tabbar">
@@ -976,7 +984,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 /* ---------- app state ---------- */
 let currentCollectionId=null, editingPlateId=null, editingCollectionId=null;
 let pendingPhoto=null, pickedAccent=ACCENTS[0], pickedRarity='good', pickedShare=false;
-let quickMode=false, maybeMode=false, detailPlateId=null;
+let quickMode=false, maybeMode=false, singleMode=false, detailPlateId=null;
 
 /* ============ AUTH ============ */
 let authMode='signin'; // or 'signup'
@@ -1078,7 +1086,7 @@ async function bootApp(){
   maybePile = await loadMaybeFromCloud();
   const cloudSettings = await loadSettingsFromCloud();
   // merge cloud settings with any profile info already loaded
-  misc = Object.assign({}, cloudSettings, {profileName: misc.profileName, profileLoc: misc.profileLoc});
+  misc = Object.assign({}, cloudSettings, {profileName: misc.profileName, profileLoc: misc.profileLoc, profilePhoto: misc.profilePhoto || cloudSettings.profilePhoto});
   // ensure at least one collection exists. Try to create one in the cloud;
   // if anything fails, fall back to a safe in-memory default so the app never
   // ends up with zero collections (which would break the find/save screens).
@@ -1104,7 +1112,7 @@ async function bootApp(){
 
 async function loadProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',currentUser.id).single();
-  if(data){ myProfile=data; misc.profileName=data.hunter_name; misc.profileLoc=data.location; }
+  if(data){ myProfile=data; misc.profileName=data.hunter_name; misc.profileLoc=data.location; if(data.avatar) misc.profilePhoto=data.avatar; }
 }
 
 /* ---------- finds: cloud <-> local model ----------
@@ -1113,11 +1121,11 @@ async function loadProfile(){
    We map collection<->collectionId via collection NAME stored on the row. */
 function rowToPlate(r){
   const coll = collections.find(c=>c.name===r.collection) || collections[0];
-  return {id:r.id, name:r.name, collectionId:coll?coll.id:(collections[0]&&collections[0].id), rarity:r.rarity||'good', value:r.value||'', paid:r.paid||'', pattern:r.pattern||'', maker:r.maker||'', year:r.year||'', origin:r.origin||'', condition:r.condition||'', where:r.where_found||'', notes:r.notes||'', photo:r.photo||null, shared:!!r.shared, created:r.created_at?new Date(r.created_at).getTime():Date.now(), updated:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
+  return {id:r.id, name:r.name, collectionId:coll?coll.id:(collections[0]&&collections[0].id), isSingle:!!r.is_single, rarity:r.rarity||'good', value:r.value||'', paid:r.paid||'', pattern:r.pattern||'', maker:r.maker||'', year:r.year||'', origin:r.origin||'', condition:r.condition||'', where:r.where_found||'', notes:r.notes||'', photo:r.photo||null, shared:!!r.shared, created:r.created_at?new Date(r.created_at).getTime():Date.now(), updated:r.updated_at?new Date(r.updated_at).getTime():Date.now()};
 }
 function plateToRow(p){
   const coll=collections.find(c=>c.id===p.collectionId);
-  return {user_id:currentUser.id, name:p.name||'', collection:coll?coll.name:'', rarity:p.rarity||'good', value:p.value||'', paid:p.paid||'', pattern:p.pattern||'', maker:p.maker||'', year:p.year||'', origin:p.origin||'', condition:p.condition||'', where_found:p.where||'', notes:p.notes||'', photo:p.photo||null, shared:!!p.shared};
+  return {user_id:currentUser.id, name:p.name||'', collection:coll?coll.name:'', is_single:!!p.isSingle, rarity:p.rarity||'good', value:p.value||'', paid:p.paid||'', pattern:p.pattern||'', maker:p.maker||'', year:p.year||'', origin:p.origin||'', condition:p.condition||'', where_found:p.where||'', notes:p.notes||'', photo:p.photo||null, shared:!!p.shared};
 }
 async function loadFindsFromCloud(){
   const {data,error}=await sb.from('finds').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
@@ -1148,7 +1156,9 @@ async function persistFriends(){ /* friendships live in cloud now; handled in fr
 function esc(s){ return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function numFrom(v){ if(v==null)return 0; const m=String(v).replace(/[^0-9.]/g,''); return parseFloat(m)||0; }
 function fmtMoney(v){ if(v==null||v==='')return ''; const s=String(v).trim(); if(/^[\$£€]/.test(s))return s; if(/^[\d.,]+$/.test(s))return '$'+s; return s; }
-function platesIn(cid){ return plates.filter(p=>p.collectionId===cid); }
+function platesIn(cid){ return plates.filter(p=>p.collectionId===cid && !p.isSingle); }
+function singleItems(){ return plates.filter(p=>p.isSingle); }
+let denMode='collections';
 function denTotal(){ return plates.reduce((s,p)=>s+numFrom(p.value),0); }
 
 function renderHeaderStats(){
@@ -1179,6 +1189,17 @@ function renderDen(){
   $('view-den').classList.add('active');
   $('searchResults').classList.add('hidden'); $('denMain').classList.remove('hidden');
   renderHeaderStats();
+  // toggle UI state
+  document.querySelectorAll('#denSeg .seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.den===denMode));
+  const showingSingles = denMode==='singles';
+  $('collectionsGrid').style.display = showingSingles?'none':'';
+  $('singlesGrid').style.display = showingSingles?'':'none';
+  $('denHeading').textContent = showingSingles?'Single Items':'Your Collections';
+  $('denSub').textContent = showingSingles?'One-off treasures that don’t belong to a set.':'Every great hunt needs a place to keep the spoils.';
+  $('newBtnLabel').textContent = showingSingles?'Add item':'New';
+
+  if(showingSingles){ renderSingles(); return; }
+
   const grid=$('collectionsGrid'); grid.innerHTML='';
   collections.forEach(c=>{
     const cps=platesIn(c.id);
@@ -1196,6 +1217,20 @@ function renderDen(){
   add.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>New collection</span>`;
   add.onclick=()=>openCollectionModal(); grid.appendChild(add);
 }
+
+function renderSingles(){
+  const grid=$('singlesGrid');
+  const items=singleItems();
+  if(items.length===0){
+    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1"><div class="fox-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#7c4820" stroke-width="1.1"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/></svg></div><h3>No single items yet</h3><p>Found something that isn’t part of a set? Add it here as a one-off treasure.</p><button class="btn btn-primary" onclick="openSingleModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add single item</button></div>`;
+    return;
+  }
+  grid.innerHTML='';
+  items.forEach(p=>{ const card=document.createElement('div'); card.className='plate-card'; card.innerHTML=plateCardHTML(p); card.onclick=()=>openDetail(p.id); grid.appendChild(card); });
+}
+
+// open the add-find modal pre-set as a single item
+window.openSingleModal=function(){ openPlateModal(null,{single:true}); };
 
 function openCollection(cid){
   currentCollectionId=cid;
@@ -1296,12 +1331,15 @@ $('collDelete').onclick=async()=>{
   closeOverlay('collModal'); currentCollectionId=null; switchTab('den'); showToast('Collection deleted');
 };
 $('collCancel').onclick=()=>closeOverlay('collModal');
-$('newCollectionTop').onclick=()=>openCollectionModal();
+$('newCollectionTop').onclick=()=>{ if(denMode==='singles') openSingleModal(); else openCollectionModal(); };
+document.querySelectorAll('#denSeg .seg-btn').forEach(btn=>{
+  btn.onclick=()=>{ denMode=btn.dataset.den; renderDen(); };
+});
 
 /* ---------- PLATE MODAL ---------- */
 function buildRarity(){ const g=$('rarityGrid'); g.innerHTML=''; RARITY.forEach(r=>{const o=document.createElement('div');o.className='rarity-opt'+(r.key===pickedRarity?' sel':'');o.innerHTML=`<div class="dot" style="background:${r.hex}"></div><div class="rl">${r.label}</div>`;o.onclick=()=>{pickedRarity=r.key;[...g.children].forEach(x=>x.classList.remove('sel'));o.classList.add('sel');};g.appendChild(o);}); }
 window.openPlateModal=function(plateId,opts={}){
-  editingPlateId=plateId||null; pendingPhoto=null; quickMode=!!opts.quick; maybeMode=!!opts.maybe;
+  editingPlateId=plateId||null; pendingPhoto=null; quickMode=!!opts.quick; maybeMode=!!opts.maybe; singleMode=!!opts.single;
   $('estimatorOut').innerHTML='';
   const sel=$('f_collection'); sel.innerHTML=collections.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   const expander=document.querySelector('#plateModal .expander');
@@ -1315,8 +1353,12 @@ window.openPlateModal=function(plateId,opts={}){
     ['f_name','f_value','f_pattern','f_maker','f_year','f_origin','f_paid','f_where','f_notes'].forEach(id=>$(id).value=''); $('f_condition').value='';
     pickedRarity=misc.defaultRarity||'good'; sel.value=currentCollectionId||(collections[0]&&collections[0].id)||''; setPhotoPreview(null);
     if(quickMode){ $('plateModalTitle').textContent='Quick capture'; $('plateModalSub').textContent='Photo, name, price. Polish it later at the den.'; expander.style.display='none'; $('f_paid').value=''; }
+    else if(singleMode){ $('plateModalTitle').textContent='Add single item'; $('plateModalSub').textContent='A one-off treasure, not part of a set.'; expander.style.display=''; }
     else { $('plateModalTitle').textContent='Add a find'; $('plateModalSub').textContent='Snap a photo and jot down what you know.'; expander.style.display=''; }
   }
+  // hide the collection picker when adding a single item
+  const collField = $('f_collection').closest('.field') || $('f_collection').parentElement;
+  if(collField) collField.style.display = singleMode ? 'none' : '';
   buildRarity();
   pickedShare = plateId ? !!(plates.find(x=>x.id===plateId)||{}).shared : !!misc.defaultShare;
   setSwitch($('shareSwitch'), pickedShare);
@@ -1324,7 +1366,6 @@ window.openPlateModal=function(plateId,opts={}){
 };
 function setSwitch(el,on){ el.setAttribute('aria-checked', on?'true':'false'); }
 $('shareSwitch').onclick=()=>{ pickedShare=!pickedShare; setSwitch($('shareSwitch'),pickedShare); };
-$('fab').onclick=()=>openPlateModal();
 $('quickCaptureBtn').onclick=()=>{ openPlateModal(null,{quick:true}); setTimeout(()=>$('photoInput').click(),350); };
 $('plateCancel').onclick=()=>closeOverlay('plateModal');
 
@@ -1335,7 +1376,7 @@ function setPhotoPreview(url){ const d=$('photoDrop'); d.querySelectorAll('img')
 $('plateSave').onclick=async()=>{
   const name=$('f_name').value.trim();
   if(!name&&!pendingPhoto){showToast('Add a photo or a name first');return;}
-  const data={name,value:$('f_value').value.trim(),rarity:pickedRarity,shared:pickedShare,pattern:$('f_pattern').value.trim(),maker:$('f_maker').value.trim(),year:$('f_year').value.trim(),origin:$('f_origin').value.trim(),paid:$('f_paid').value.trim(),condition:$('f_condition').value,where:$('f_where').value.trim(),notes:$('f_notes').value.trim(),collectionId:$('f_collection').value,photo:pendingPhoto||null};
+  const data={name,value:$('f_value').value.trim(),rarity:pickedRarity,shared:pickedShare,pattern:$('f_pattern').value.trim(),maker:$('f_maker').value.trim(),year:$('f_year').value.trim(),origin:$('f_origin').value.trim(),paid:$('f_paid').value.trim(),condition:$('f_condition').value,where:$('f_where').value.trim(),notes:$('f_notes').value.trim(),collectionId:$('f_collection').value,isSingle:singleMode||(editingPlateId?(plates.find(x=>x.id===editingPlateId)||{}).isSingle:false),photo:pendingPhoto||null};
   const wasNew=!editingPlateId; const prevRarity = editingPlateId?(plates.find(x=>x.id===editingPlateId)||{}).rarity:null;
   $('plateSave').disabled=true; $('plateSave').textContent='Saving…';
   try{
@@ -2005,7 +2046,7 @@ $('profileSave').onclick=async()=>{
   const n=$('profileNameInput').value.trim(); if(!n){showToast('Pick a hunter name');return;}
   const loc=$('profileLocInput').value.trim();
   $('profileSave').disabled=true;
-  const {error}=await sb.from('profiles').update({hunter_name:n,location:loc}).eq('id',currentUser.id);
+  const {error}=await sb.from('profiles').update({hunter_name:n,location:loc,avatar:misc.profilePhoto||null}).eq('id',currentUser.id);
   $('profileSave').disabled=false;
   if(error){ showToast('Could not save profile — check connection'); return; }
   misc.profileName=n; misc.profileLoc=loc; await persistAux();
@@ -2031,16 +2072,25 @@ $('profilePhotoInput').onchange=async e=>{
   const f=e.target.files[0]; if(!f)return;
   showToast('Processing photo…');
   misc.profilePhoto=await compressImage(f,400,.8);
-  await persistAux(); renderProfile(); showToast('Photo updated');
+  renderProfile();                      // show it immediately
+  await persistAux();
+  // write straight to the profiles.avatar column so it survives refresh
+  const {error}=await sb.from('profiles').upsert({id:currentUser.id,avatar:misc.profilePhoto},{onConflict:'id'});
+  if(error){
+    console.error('avatar save failed:', error);
+    showToast('Photo didn\u2019t save — '+(error.message||'try again'));
+    return;
+  }
+  showToast('Photo updated');
 };
 
 $('saveProfileBtn').onclick=async()=>{
   const n=$('set_name').value.trim(); if(!n){showToast('Pick a hunter name');return;}
   const loc=$('set_loc').value.trim();
   $('saveProfileBtn').disabled=true;
-  const {error}=await sb.from('profiles').update({hunter_name:n,location:loc}).eq('id',currentUser.id);
+  const {error}=await sb.from('profiles').upsert({id:currentUser.id,hunter_name:n,location:loc,avatar:misc.profilePhoto||null},{onConflict:'id'});
   $('saveProfileBtn').disabled=false;
-  if(error){ showToast('Could not save — check connection'); return; }
+  if(error){ console.error('profile save failed:',error); showToast('Could not save — '+(error.message||'check connection')); return; }
   misc.profileName=n; misc.profileLoc=loc; await persistAux();
   renderProfile(); showToast('Profile saved');
 };
